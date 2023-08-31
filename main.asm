@@ -1,13 +1,8 @@
 PROCESSOR 12F675
 
 // /opt/microchip/xc8/v2.41/pic/include/proc/pic12f675.inc
+#include <xc.inc>
 #include <pic12f675.inc>
-    
-// Определяем частоту тактирования
-FOSC equ 4000000
-
-// Определяем период таймера (в миллисекундах)
-TMR0_PERIOD_MS equ 10
     
 CONFIG  FOSC    = INTRCIO ; Oscillator Selection bits (INTOSC oscillator: I/O function on GP4/OSC2/CLKOUT pin, I/O function on GP5/OSC1/CLKIN)
 CONFIG  WDTE    = OFF     ; Watchdog Timer Enable bit (WDT disabled)
@@ -17,57 +12,57 @@ CONFIG  BOREN   = OFF     ; Brown-out Detect Enable bit (BOD disabled)
 CONFIG  CP      = OFF     ; Code Protection bit (Program Memory code protection is disabled)
 CONFIG  CPD     = OFF     ; Data Code Protection bit (Data memory code protection is disabled)
 
-PSECT ResetVector, class=CODE, delta=2
-ResetVector:
-    PAGESEL InitAll
-    GOTO InitAll
+w_save	    EQU 0
+s_save	    EQU 0
     
-PSECT ISRVector, class=CODE, delta=2
-ISRVector:
-    BCF	    STATUS, STATUS_RP0_POSITION	    ; Set bank 1
+PSECT reset_vector, class=CODE, delta=2
+reset_vector:
+    GOTO main
+PSECT isr_vector, class=CODE, delta=2
+isr_vector:
+    bcf	    INTF
     
-    BCF	    GPIO, GPIO_GPIO4_POSITION	    ; Disable GPI04
-    BCF	    INTCON, INTCON_T0IF_POSITION    ; Clear T0IF
-    BSF	    GPIO, GPIO_GPIO4_POSITION	    ; Enable GPI04
-    CLRF    TMR0			    ; Clear Timer0 register
+    ; save context
+    movwf   w_save
+    movf    STATUS,w
+    movwf   s_save
+    
+    BCF	    RP0 ; Set bank 0
+    
+    ; restore context
+    movf    s_save,w
+    movwf   STATUS
+    movf    w_save,w
+    
     RETFIE
+PSECT code, delta=2
+init_timer0:
+    BCF	    RP0	    ; Set bank 0
+    MOVLW   0xE7
+    MOVWF   TMR0
+    CLRF    INTCON  ; Disable interrupts and clear T0IF
+    BSF	    T0IE    ; Enable TMR0 interrupt
+    BSF	    GIE	    ; Enable all interrupts
+    BSF	    RP0	    ; Set bank 1
 
-PSECT code, delta=2
-InitAll:
-    BCF STATUS, STATUS_RP0_POSITION	; Set bank 1
-    
-    CLRF    GPIO			; Set byte at address GPIO to 0
-    
-    MOVLW   0x07
-    MOVWF   CMCON			; Disable comparator
-    
-    BSF	    STATUS, STATUS_RP0_POSITION ; Set bank 2
-    
-    CLRF    ANSEL			; Set ports as digital I/O, not analog input
-    
-    MOVLW   0x08			; GP3 input, rest all output
-    MOVWF   TRISIO			; Turns all pins which can act as digital outputs
-    
-    CALL    InitTimer0
-    GOTO    Main
-    
-PSECT code, delta=2
-InitTimer0:
-    BCF	    STATUS, STATUS_RP0_POSITION	    ; Set bank 1
-    
-    CLRF    TMR0			    ; Clear Timer0 register
-    CLRF    INTCON			    ; Disable interrupts and clear T0IF
-    BSF	    INTCON, INTCON_T0IE_POSITION    ; Enable TMR0 interrupt
-    BSF	    INTCON, INTCON_GIE_POSITION	    ; Enable all interrupts
-    
-    BSF	    STATUS, STATUS_RP0_POSITION	    ; Set bank 2
-    
-    MOVLW   0x08			    ; 1:8
-    MOVWF   OPTION_REG			    ; Timer0 increment from internal clock with a prescaler of 1:8
-    
+    ; Configure TIMER0 with prescaler of 1:256 and enable interrupt
+    MOVLW   0b111
+    MOVWF   OPTION_REG
     RETURN
-    
 PSECT code, delta=2
-Main:
-    GOTO    Main
-END ResetVector
+main:
+    BCF	    RP0		; Set bank 0
+    CLRF    GPIO	; Set byte at address GPIO to 0
+    MOVLW   0x07
+    MOVWF   CMCON	; Disable comparator
+    BSF	    RP0		; Set bank 1
+    CLRF    ANSEL	; Set ports as digital I/O, not analog input
+    MOVLW   0x08	; GP3 input, rest all output
+    MOVWF   TRISIO	; Turns all pins which can act as digital outputs
+    CALL    init_timer0
+loop:
+    BCF	    RP0	    ; Set bank 0
+    BSF	    GPIO4   ; Enable GPI04
+    BCF	    GPIO4   ; Disable GPI04
+    GOTO    loop
+END reset_vector

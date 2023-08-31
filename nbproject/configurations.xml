@@ -1036,7 +1036,7 @@
       <pic-as-linker>
         <property key="linker-callgraph" value="std"/>
         <property key="linker-checksum" value=""/>
-        <property key="linker-custom-options" value="-pResetVector=0;-pISRVector=4"/>
+        <property key="linker-custom-options" value="-preset_vector=0;-pisr_vector=4"/>
         <property key="linker-fill" value=""/>
         <property key="linker-format-hex-file-for-download" value="false"/>
         <property key="linker-libraries" value=""/>
